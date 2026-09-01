@@ -1,0 +1,15 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Data (large files - don't belong in git)
+data/*.csv
+
+# Environment secrets
+.env
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
