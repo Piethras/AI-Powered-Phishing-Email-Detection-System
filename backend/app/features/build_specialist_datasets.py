@@ -20,7 +20,7 @@ spamassassin = pd.read_csv("../data/SpamAssasin.csv", on_bad_lines="skip")
 header_url_df = pd.concat([
     ceas[["sender", "body", "urls", "label"]].assign(source="ceas08"),
     spamassassin[["sender", "body", "urls", "label"]].assign(source="spamassassin"),
-], ignore_index=True).dropna(subset=["sender", "label"])
+], ignore_index=True).dropna(subset=["sender", "body", "label"])
 
 print(f"Header/URL specialist dataset: {len(header_url_df)} rows (CEAS_08 + SpamAssassin only)")
 print(header_url_df.groupby(["source", "label"]).size())
