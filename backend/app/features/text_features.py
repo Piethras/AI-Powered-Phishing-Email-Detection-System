@@ -35,7 +35,7 @@ def build_tfidf_features(texts, max_features=3000):
     vectorizer = TfidfVectorizer(
         max_features=max_features,   # cap vocabulary size - keeps this manageable
         stop_words="english",        # removes "the", "to", "is", etc. (Day 6 concept)
-        ngram_range=(1, 1),          # single words only, for now
+        ngram_range=(1, 2),          # single words AND two-word phrases (Day 8 upgrade)
     )
     matrix = vectorizer.fit_transform(cleaned)
     return vectorizer, matrix
