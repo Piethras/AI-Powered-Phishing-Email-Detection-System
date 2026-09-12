@@ -87,3 +87,38 @@ def predict_email(sender: str, body: str) -> dict:
         },
         "reasons": reasons,
     }
+
+def predict_and_save(sender: str, body: str, subject: str = ""):
+    """
+    Runs the pipeline AND persists the result to MySQL.
+    Returns the same result dict as predict_email(), plus the saved email_id.
+    """
+    from app import db
+    from app.models.db_models import Email, Prediction
+
+    result = predict_email(sender, body)
+
+    # Also compute header flags for the emails table itself
+    header_result = analyze_sender(sender)
+
+    email_row = Email(
+        sender=sender,
+        subject=subject,
+        body_snippet=body[:500],  # store a snippet, not the full raw email
+        header_mismatch=header_result["header_mismatch"],
+    )
+    db.session.add(email_row)
+    db.session.flush()  # assigns email_row.id without committing yet
+
+    prediction_row = Prediction(
+        email_id=email_row.id,
+        confidence_score=result["final_score"],
+        predicted_label=result["label"],
+        top_reasons=result["reasons"],
+        model_version="v1-specialist-ensemble",
+    )
+    db.session.add(prediction_row)
+    db.session.commit()
+
+    result["email_id"] = email_row.id
+    return result

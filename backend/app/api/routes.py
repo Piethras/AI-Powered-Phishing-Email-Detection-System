@@ -26,7 +26,7 @@ def predict():
     Expects: {"sender": "...", "body": "..."}
     Returns: final phishing score, label, and contributing reasons.
     """
-    from app.api.pipeline import predict_email
+    from app.api.pipeline import predict_and_save
 
     data = request.json or {}
     sender = data.get("sender", "")
@@ -35,7 +35,7 @@ def predict():
     if not body:
         return jsonify({"error": "'body' is required"}), 400
 
-    result = predict_email(sender, body)
+    result = predict_and_save(sender, body, data.get("subject", ""))
     return jsonify(result)
 
 
