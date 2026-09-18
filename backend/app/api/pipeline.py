@@ -88,6 +88,17 @@ def predict_email(sender: str, body: str) -> dict:
         "reasons": reasons,
     }
 
+def is_whitelisted(sender: str) -> bool:
+    """Checks if the sender's domain is on the explicit whitelist (Day 19)."""
+    from app.models.db_models import Whitelist
+    import re
+
+    match = re.search(r"@([\w.-]+)", sender or "")
+    if not match:
+        return False
+    domain = match.group(1).lower()
+    return Whitelist.query.filter_by(sender_domain=domain).first() is not None
+
 def predict_and_save(sender: str, body: str, subject: str = ""):
     """
     Runs the pipeline AND persists the result to MySQL.
@@ -96,7 +107,16 @@ def predict_and_save(sender: str, body: str, subject: str = ""):
     from app import db
     from app.models.db_models import Email, Prediction
 
-    result = predict_email(sender, body)
+    if is_whitelisted(sender):
+        result = {
+            "final_score": 0.01,
+            "label": "legitimate",
+            "threshold_used": THRESHOLD,
+            "specialist_scores": {"text": 0.0, "header": 0.0, "url": 0.0},
+            "reasons": ["sender_domain_whitelisted"],
+        }
+    else:
+        result = predict_email(sender, body)
 
     # Also compute header flags for the emails table itself
     header_result = analyze_sender(sender)

@@ -548,3 +548,27 @@ body {
     padding-top: 68px;
   }
 }
+
+.feedback-btns { display: flex; gap: 6px; }
+
+.feedback-btn {
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid #E4E8EE;
+  background: #fff; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #8A93A8; transition: background 0.15s ease, color 0.15s ease;
+}
+
+.feedback-btn--up:hover { background: #E4F6ED; color: #1A8F65; border-color: #CBEEDC; }
+.feedback-btn--down:hover { background: #FCE9E8; color: #D9433D; border-color: #F6D4D2; }
+
+.feedback-done { font-size: 11.5px; color: #1A8F65; font-weight: 600; }
+
+.whitelist-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.whitelist-form .scan-form__input { flex: 1; min-width: 180px; margin: 0; }
+.whitelist-form .scan-form__submit { align-self: center; display: flex; align-items: center; gap: 6px; }

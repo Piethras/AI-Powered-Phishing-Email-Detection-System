@@ -1,7 +1,7 @@
 import React from "react";
 import { useState, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Shield, Mail, History, ListChecks, MessageSquare, Settings, AlertTriangle, CheckCircle2, Target, Inbox, Gauge, Bell, Send, Eye, Menu, X } from "lucide-react";
+import { Shield, Mail, History, ListChecks, MessageSquare, Settings, AlertTriangle, CheckCircle2, Target, Inbox, Gauge, Bell, Send, Eye, Menu, X, ThumbsUp, ThumbsDown, Plus } from "lucide-react";
 import "./App.css";
 
 const API_BASE = "http://127.0.0.1:5000/api";
@@ -231,12 +231,28 @@ function StatusBadge({ label }) {
 function ScansTable({ predictions }) {
   const [filter, setFilter] = useState("all");
   const [expandedId, setExpandedId] = useState(null);
+  const [feedbackGiven, setFeedbackGiven] = useState({});
 
   const filtered = predictions.filter((p) => {
     if (filter === "phishing") return p.predicted_label === "phishing";
     if (filter === "legitimate") return p.predicted_label !== "phishing";
     return true;
   });
+
+  const submitFeedback = async (emailId, verdict, rowKey, e) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`${API_BASE}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email_id: emailId, user_verdict: verdict }),
+      });
+      if (!res.ok) throw new Error("Feedback failed");
+      setFeedbackGiven((prev) => ({ ...prev, [rowKey]: verdict }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <div className="panel">
@@ -267,6 +283,7 @@ function ScansTable({ predictions }) {
               <th>Risk Level</th>
               <th>Confidence</th>
               <th>Status</th>
+              <th>Feedback</th>
               <th></th>
             </tr>
           </thead>
@@ -275,9 +292,10 @@ function ScansTable({ predictions }) {
               const date = new Date(p.predicted_at);
               const id = `${p.email_id}-${p.predicted_at}`;
               const expanded = expandedId === id;
+              const given = feedbackGiven[id];
               return (
                 <React.Fragment key={id}>
-                                    <tr className="scans-table__row" onClick={() => setExpandedId(expanded ? null : id)}>
+                  <tr className="scans-table__row" onClick={() => setExpandedId(expanded ? null : id)}>
                     <td className="muted" data-label="Date">
                       {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </td>
@@ -286,11 +304,33 @@ function ScansTable({ predictions }) {
                     <td data-label="Risk"><RiskBadge level={riskLevel(p)} /></td>
                     <td className="muted" data-label="Confidence">{(p.confidence_score * 100).toFixed(1)}%</td>
                     <td data-label="Status"><StatusBadge label={p.predicted_label} /></td>
+                    <td data-label="Feedback">
+                      {given ? (
+                        <span className="feedback-done">Thanks!</span>
+                      ) : (
+                        <div className="feedback-btns">
+                          <button
+                            className="feedback-btn feedback-btn--up"
+                            title="Correctly classified"
+                            onClick={(e) => submitFeedback(p.email_id, p.predicted_label === "phishing" ? "true_positive" : "true_negative", id, e)}
+                          >
+                            <ThumbsUp size={13} />
+                          </button>
+                          <button
+                            className="feedback-btn feedback-btn--down"
+                            title="Incorrectly classified"
+                            onClick={(e) => submitFeedback(p.email_id, p.predicted_label === "phishing" ? "false_positive" : "false_negative", id, e)}
+                          >
+                            <ThumbsDown size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
                     <td data-label=""><Eye size={15} className="view-icon" /></td>
                   </tr>
                   {expanded && (
                     <tr className="scans-table__details-row">
-                      <td colSpan={7}>
+                      <td colSpan={8}>
                         <p className="email-row__snippet">{p.body_snippet}</p>
                         {p.reasons?.length > 0 && (
                           <div className="reasons">{p.reasons.map((r, i) => <span key={i} className="reason-tag">{r}</span>)}</div>
@@ -443,6 +483,80 @@ function MobileNav({ active, onNavigate }) {
   );
 }
 
+function WhitelistPage() {
+  const [entries, setEntries] = useState([]);
+  const [domain, setDomain] = useState("");
+  const [addedBy, setAddedBy] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    fetch(`${API_BASE}/whitelist`)
+      .then((r) => r.json())
+      .then((data) => { setEntries(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleAdd = async () => {
+    if (!domain.trim()) { setError("Domain is required."); return; }
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/whitelist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender_domain: domain.trim(), added_by: addedBy.trim() || "unknown" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add");
+      setDomain("");
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="panel">
+      <h2 className="panel__title">Whitelisted Senders</h2>
+      <p className="status-message" style={{ marginBottom: 16 }}>
+        Emails from whitelisted domains are automatically classified as legitimate,
+        skipping full analysis. Add domains deliberately &mdash; this is a separate,
+        intentional action from routine scan feedback.
+      </p>
+
+      <div className="whitelist-form">
+        <input className="scan-form__input" placeholder="Domain (e.g. company.com)" value={domain} onChange={(e) => setDomain(e.target.value)} />
+        <input className="scan-form__input" placeholder="Your name" value={addedBy} onChange={(e) => setAddedBy(e.target.value)} />
+        <button className="scan-form__submit" onClick={handleAdd}><Plus size={14} /> Add</button>
+      </div>
+      {error && <p className="upload-panel__error">{error}</p>}
+
+      {loading ? (
+        <p className="status-message">Loading...</p>
+      ) : entries.length === 0 ? (
+        <p className="status-message">No domains whitelisted yet.</p>
+      ) : (
+        <table className="scans-table" style={{ marginTop: 20 }}>
+          <thead>
+            <tr><th>Domain</th><th>Added By</th><th>Added At</th></tr>
+          </thead>
+          <tbody>
+            {entries.map((w) => (
+              <tr key={w.id}>
+                <td>{w.sender_domain}</td>
+                <td className="muted">{w.added_by}</td>
+                <td className="muted">{new Date(w.added_at).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [predictions, setPredictions] = useState([]);
   const [insights, setInsights] = useState(null);
@@ -471,10 +585,12 @@ function App() {
       <div className="app">
         <TopBar />
 
-        {activeNav === "scan" ? (
+                {activeNav === "scan" ? (
           <ScanEmailPage onScanned={handleUploaded} />
+        ) : activeNav === "whitelist" ? (
+          <WhitelistPage />
         ) : activeNav !== "dashboard" ? (
-          <p className="status-message">This section is coming soon — Day 19 will wire up feedback &amp; whitelist actions.</p>
+          <p className="status-message">This section is coming soon — Day 19 will wire up more actions.</p>
         ) : (
           <>
             <div className="dashboard-body">

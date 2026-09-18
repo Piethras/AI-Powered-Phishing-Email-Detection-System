@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS whitelist (
 CREATE TABLE IF NOT EXISTS feedback (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     email_id        INT NOT NULL,
-    user_verdict    VARCHAR(20) NOT NULL, -- 'confirmed_phishing' | 'false_positive'
+    user_verdict    VARCHAR(20) NOT NULL, -- 'true_positive' | 'false_positive' | 'true_negative' | 'false_negative'
     comment         TEXT,
     submitted_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (email_id) REFERENCES emails(id)

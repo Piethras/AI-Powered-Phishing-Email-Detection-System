@@ -148,10 +148,70 @@ def upload_email():
 
 
 @api_bp.route("/feedback", methods=["POST"])
+@api_bp.route("/feedback", methods=["POST"])
 def feedback():
     """
-    Expects: {"email_id": int, "user_verdict": "safe"|"missed_phishing"}
-    Stores feedback and (optionally) updates the whitelist.
+    Expects: {"email_id": int, "user_verdict": "confirmed_phishing"|"false_positive", "comment": "..."}
+    Stores feedback with an audit trail (Day 3 safeguard: never auto-alters
+    classifier behavior from a single submission - just recorded for review).
     """
-    # --- TODO Day 19 ---
-    return jsonify({"status": "not_implemented_yet"})
+    from app import db
+    from app.models.db_models import Feedback
+
+    data = request.json or {}
+    email_id = data.get("email_id")
+    verdict = data.get("user_verdict")
+
+    valid_verdicts = ("true_positive", "false_positive", "true_negative", "false_negative")
+    if not email_id or verdict not in valid_verdicts:
+        return jsonify({"error": "email_id and a valid user_verdict are required"}), 400
+
+    entry = Feedback(
+        email_id=email_id,
+        user_verdict=verdict,
+        comment=data.get("comment", ""),
+    )
+    db.session.add(entry)
+    db.session.commit()
+
+    return jsonify({"status": "recorded", "feedback_id": entry.id})
+
+@api_bp.route("/whitelist", methods=["GET"])
+def get_whitelist():
+    """Returns all whitelisted sender domains."""
+    from app.models.db_models import Whitelist
+
+    entries = Whitelist.query.order_by(Whitelist.added_at.desc()).all()
+    return jsonify([
+        {"id": w.id, "sender_domain": w.sender_domain, "added_by": w.added_by, "added_at": w.added_at.isoformat()}
+        for w in entries
+    ])
+
+
+@api_bp.route("/whitelist", methods=["POST"])
+def add_whitelist():
+    """
+    Expects: {"sender_domain": "example.com", "added_by": "Nyanga"}
+    This is a DELIBERATE action, distinct from /api/feedback - Day 3's
+    safeguard against feedback poisoning: whitelisting a domain requires
+    an explicit, separate action, not a side-effect of casual feedback.
+    """
+    from app import db
+    from app.models.db_models import Whitelist
+
+    data = request.json or {}
+    domain = (data.get("sender_domain") or "").strip().lower()
+    added_by = data.get("added_by", "unknown")
+
+    if not domain:
+        return jsonify({"error": "sender_domain is required"}), 400
+
+    existing = Whitelist.query.filter_by(sender_domain=domain).first()
+    if existing:
+        return jsonify({"error": f"{domain} is already whitelisted"}), 400
+
+    entry = Whitelist(sender_domain=domain, added_by=added_by)
+    db.session.add(entry)
+    db.session.commit()
+
+    return jsonify({"status": "added", "id": entry.id, "sender_domain": domain})
