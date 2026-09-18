@@ -38,6 +38,114 @@ def predict():
     result = predict_and_save(sender, body, data.get("subject", ""))
     return jsonify(result)
 
+@api_bp.route("/predictions", methods=["GET"])
+def get_predictions():
+    """
+    Returns recent predictions with their linked email info, newest first.
+    Powers the Confidence Score Dashboard (Day 3 requirement).
+    """
+    from app.models.db_models import Email, Prediction
+
+    results = (
+        Prediction.query
+        .join(Email, Prediction.email_id == Email.id)
+        .order_by(Prediction.predicted_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    return jsonify([
+        {
+            "email_id": p.email_id,
+            "sender": p.email.sender,
+            "subject": p.email.subject,
+            "body_snippet": p.email.body_snippet,
+            "confidence_score": p.confidence_score,
+            "predicted_label": p.predicted_label,
+            "reasons": p.top_reasons,
+            "predicted_at": p.predicted_at.isoformat(),
+        }
+        for p in results
+    ])
+
+@api_bp.route("/insights", methods=["GET"])
+def get_insights():
+    """
+    Aggregates stored predictions: totals, top flagged domains, and a
+    daily phishing-vs-legitimate breakdown for the dashboard chart.
+    """
+    from app.models.db_models import Email, Prediction
+    from collections import Counter, defaultdict
+    import re
+
+    all_predictions = (
+        Prediction.query.join(Email, Prediction.email_id == Email.id).all()
+    )
+
+    domain_counter = Counter()
+    daily_counts = defaultdict(lambda: {"phishing": 0, "legitimate": 0})
+
+    for p in all_predictions:
+        day = p.predicted_at.strftime("%Y-%m-%d")
+        daily_counts[day][p.predicted_label] += 1
+
+        if p.predicted_label == "phishing":
+            sender = p.email.sender or ""
+            match = re.search(r"@([\w.-]+)", sender)
+            if match:
+                domain_counter[match.group(1).lower()] += 1
+
+    daily_series = [
+        {"date": day, **counts}
+        for day, counts in sorted(daily_counts.items())
+    ]
+
+    total = len(all_predictions)
+    total_flagged = sum(1 for p in all_predictions if p.predicted_label == "phishing")
+
+    return jsonify({
+        "total_scanned": total,
+        "total_flagged": total_flagged,
+        "total_legitimate": total - total_flagged,
+        "flagged_rate": round(total_flagged / total, 4) if total > 0 else 0,
+        "top_flagged_domains": [{"domain": d, "count": c} for d, c in domain_counter.most_common(10)],
+        "daily_series": daily_series,
+    })
+
+@api_bp.route("/upload", methods=["POST"])
+def upload_email():
+    """
+    Accepts a raw .eml file (multipart/form-data, field name 'file') OR
+    raw email text sent as a Blob under the same field name.
+    Parses it with parse_raw_email() (Day 4) and scores it live.
+    """
+    from app.parsers.header_parser import parse_raw_email
+    from app.api.pipeline import predict_and_save
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded. Send as multipart/form-data with key 'file'."}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "Empty filename"}), 400
+
+    raw_bytes = file.read()
+    try:
+        raw_text = raw_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        raw_text = raw_bytes.decode("latin-1", errors="replace")
+
+    parsed = parse_raw_email(raw_text)
+    sender = parsed["from"]
+    subject = parsed["subject"]
+    body = parsed["body"]
+
+    if not body:
+        return jsonify({"error": "Could not extract body text from this file. Is it a valid .eml file?"}), 400
+
+    result = predict_and_save(sender, body, subject)
+    return jsonify(result)
+
 
 @api_bp.route("/feedback", methods=["POST"])
 def feedback():
