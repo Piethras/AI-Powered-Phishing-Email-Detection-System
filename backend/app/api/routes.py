@@ -112,6 +112,20 @@ def get_insights():
         "daily_series": daily_series,
     })
 
+@api_bp.route("/system-info", methods=["GET"])
+def system_info():
+    """Returns real system configuration for the Settings page."""
+    from app.models.db_models import Email, Whitelist
+
+    return jsonify({
+        "model_version": "v1-specialist-ensemble",
+        "threshold": 0.70,
+        "specialists": ["text (TF-IDF + Random Forest)", "header", "url"],
+        "total_emails_in_db": Email.query.count(),
+        "whitelisted_domains": Whitelist.query.count(),
+        "database": "MySQL (phishing_db)",
+    })
+
 @api_bp.route("/upload", methods=["POST"])
 def upload_email():
     """
