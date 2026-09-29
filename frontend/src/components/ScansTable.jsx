@@ -3,17 +3,14 @@ import { Eye, ThumbsUp, ThumbsDown } from "lucide-react";
 import { RiskBadge, StatusBadge } from "./Badges";
 import { riskLevel } from "../utils";
 import { API_BASE } from "../constants";
+const FILTER_LABELS = { all: "All", phishing: "Phishing", legitimate: "Legitimate", uncertain: "Needs Review" };
 
 export default function ScansTable({ predictions }) {
   const [filter, setFilter] = useState("all");
   const [expandedId, setExpandedId] = useState(null);
   const [feedbackGiven, setFeedbackGiven] = useState({});
 
-  const filtered = predictions.filter((p) => {
-    if (filter === "phishing") return p.predicted_label === "phishing";
-    if (filter === "legitimate") return p.predicted_label !== "phishing";
-    return true;
-  });
+  const filtered = predictions.filter((p) => filter === "all" || p.predicted_label === filter);
 
   const submitFeedback = async (emailId, verdict, rowKey, e) => {
     e.stopPropagation();
@@ -35,13 +32,13 @@ export default function ScansTable({ predictions }) {
       <div className="table-header">
         <h2 className="panel__title">Recent Email Scans</h2>
         <div className="table-filters">
-          {["all", "phishing", "legitimate"].map((f) => (
+          {["all", "phishing", "legitimate", "uncertain"].map((f) => (
             <button
               key={f}
               className={`table-filter ${filter === f ? "table-filter--active" : ""}`}
               onClick={() => setFilter(f)}
             >
-              {f === "all" ? "All" : f === "phishing" ? "Phishing" : "Legitimate"}
+              {FILTER_LABELS[f]}
             </button>
           ))}
         </div>
@@ -81,7 +78,9 @@ export default function ScansTable({ predictions }) {
                     <td className="muted" data-label="Confidence">{(p.confidence_score * 100).toFixed(1)}%</td>
                     <td data-label="Status"><StatusBadge label={p.predicted_label} /></td>
                     <td data-label="Feedback">
-                      {given ? (
+                      {p.predicted_label === "uncertain" ? (
+  <span className="feedback-review">Needs review</span>
+) : given ? (
                         <span className="feedback-done">Thanks!</span>
                       ) : (
                         <div className="feedback-btns">

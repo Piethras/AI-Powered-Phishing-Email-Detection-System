@@ -13,6 +13,8 @@ import joblib
 import pandas as pd
 from header_parser import analyze_sender, parse_raw_email
 from url_checker import analyze_email_urls
+from keyword_checker import check_phishing_phrases
+from coverage_guard import text_coverage
 from text_features import clean_text
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "models")
@@ -25,6 +27,8 @@ url_clf = joblib.load(os.path.join(MODELS_DIR, "url_classifier.joblib"))
 meta_clf = joblib.load(os.path.join(MODELS_DIR, "meta_classifier.joblib"))
 
 THRESHOLD = 0.70  # Day 13's chosen operating threshold
+TEXT_UNIGRAMS = {w for w in text_vectorizer.vocabulary_ if " " not in w}
+COVERAGE_MIN = 0.25  # Day 22: between French examples (0.08-0.20) and English 5th percentile (0.28)
 
 
 def predict_email(sender: str, body: str) -> dict:
@@ -50,6 +54,8 @@ def predict_email(sender: str, body: str) -> dict:
 
     # --- URL specialist ---
     url_result = analyze_email_urls(body)
+    # --- Multilingual phishing-phrase check (Day 22, supplementary signal) ---
+    phrase_result = check_phishing_phrases(body)
     url_feats = pd.DataFrame([{
         "url_count": url_result["url_count"],
         "suspicious_count": url_result["suspicious_count"],
@@ -66,6 +72,19 @@ def predict_email(sender: str, body: str) -> dict:
     final_score = meta_clf.predict_proba(meta_input)[0, 1]
     final_label = "phishing" if final_score >= THRESHOLD else "legitimate"
 
+    # --- Coverage guard (Day 22): abstain rather than trust an unreadable text score ---
+    coverage = text_coverage(body, TEXT_UNIGRAMS)
+    corroborated = (
+        bool(header_result["flags"])
+        or url_result["suspicious_count"] > 0
+        or phrase_result["match_count"] > 0
+    )
+    low_coverage_abstain = (
+        final_label == "phishing" and coverage < COVERAGE_MIN and not corroborated
+    )
+    if low_coverage_abstain:
+        final_label = "uncertain"
+
     # Build "reasons" for the dashboard (Day 3 requirement) from whichever
     # specialist(s) contributed most
     reasons = []
@@ -73,6 +92,14 @@ def predict_email(sender: str, body: str) -> dict:
         reasons.extend(header_result["flags"])
     if url_result["suspicious_count"] > 0:
         reasons.append(f"{url_result['suspicious_count']} suspicious URL(s) found")
+    if phrase_result["match_count"] > 0:
+        langs = ", ".join(phrase_result["languages_detected"])
+        reasons.append(f"{phrase_result['match_count']} known phishing phrase(s) matched ({langs})")
+    if low_coverage_abstain:
+        reasons.append(
+            f"text model recognized only {coverage:.0%} of this email's words; "
+            "no header/URL/phrase evidence - needs human review"
+        )
     if not reasons and final_label == "phishing":
         reasons.append("flagged primarily on email text/language patterns")
 

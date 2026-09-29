@@ -18,6 +18,7 @@ class Email(db.Model):
     header_mismatch = db.Column(db.Boolean, default=False)
 
     predictions = db.relationship("Prediction", backref="email", lazy=True)
+    feedback_entries = db.relationship("Feedback", backref="email", lazy=True)
 
 
 class Prediction(db.Model):

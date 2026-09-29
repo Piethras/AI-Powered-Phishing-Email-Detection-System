@@ -8,7 +8,7 @@ export default function Sidebar({ active, onNavigate }) {
       <div className="sidebar__brand">
         <Shield size={22} className="sidebar__brand-icon" />
         <div>
-          <div className="sidebar__brand-name">PhishGuard AI</div>
+          <div className="sidebar__brand-name">PhishGuard</div>
           <div className="sidebar__brand-tag">Smarter emails. Safer you.</div>
         </div>
       </div>

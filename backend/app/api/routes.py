@@ -68,11 +68,46 @@ def get_predictions():
         for p in results
     ])
 
+@api_bp.route("/predictions/all", methods=["GET"])
+def get_all_predictions():
+    """
+    Returns ALL predictions (no limit), for the Email History page.
+    Supports optional query params: ?label=phishing|legitimate
+    """
+    from app.models.db_models import Email, Prediction
+
+    query = Prediction.query.join(Email, Prediction.email_id == Email.id)
+
+    label_filter = request.args.get("label")
+    if label_filter == "phishing":
+        query = query.filter(Prediction.predicted_label == "phishing")
+    elif label_filter == "legitimate":
+        query = query.filter(Prediction.predicted_label == "legitimate")
+    elif label_filter == "uncertain":
+        query = query.filter(Prediction.predicted_label == "uncertain")
+
+    results = query.order_by(Prediction.predicted_at.desc()).all()
+
+    return jsonify([
+        {
+            "email_id": p.email_id,
+            "sender": p.email.sender,
+            "subject": p.email.subject,
+            "body_snippet": p.email.body_snippet,
+            "confidence_score": p.confidence_score,
+            "predicted_label": p.predicted_label,
+            "reasons": p.top_reasons,
+            "predicted_at": p.predicted_at.isoformat(),
+        }
+        for p in results
+    ])
+
 @api_bp.route("/insights", methods=["GET"])
 def get_insights():
     """
     Aggregates stored predictions: totals, top flagged domains, and a
-    daily phishing-vs-legitimate breakdown for the dashboard chart.
+    daily breakdown for the dashboard chart. Handles the third
+    "uncertain" label (low text coverage, needs review).
     """
     from app.models.db_models import Email, Prediction
     from collections import Counter, defaultdict
@@ -83,7 +118,7 @@ def get_insights():
     )
 
     domain_counter = Counter()
-    daily_counts = defaultdict(lambda: {"phishing": 0, "legitimate": 0})
+    daily_counts = defaultdict(lambda: {"phishing": 0, "legitimate": 0, "uncertain": 0})
 
     for p in all_predictions:
         day = p.predicted_at.strftime("%Y-%m-%d")
@@ -102,16 +137,17 @@ def get_insights():
 
     total = len(all_predictions)
     total_flagged = sum(1 for p in all_predictions if p.predicted_label == "phishing")
+    total_uncertain = sum(1 for p in all_predictions if p.predicted_label == "uncertain")
 
     return jsonify({
         "total_scanned": total,
         "total_flagged": total_flagged,
-        "total_legitimate": total - total_flagged,
+        "total_uncertain": total_uncertain,
+        "total_legitimate": total - total_flagged - total_uncertain,
         "flagged_rate": round(total_flagged / total, 4) if total > 0 else 0,
         "top_flagged_domains": [{"domain": d, "count": c} for d, c in domain_counter.most_common(10)],
         "daily_series": daily_series,
     })
-
 @api_bp.route("/system-info", methods=["GET"])
 def system_info():
     """Returns real system configuration for the Settings page."""
@@ -190,6 +226,31 @@ def feedback():
 
     return jsonify({"status": "recorded", "feedback_id": entry.id})
 
+@api_bp.route("/feedback/all", methods=["GET"])
+def get_all_feedback():
+    """Returns all submitted feedback, joined with the related email, for human review (Day 3 design principle)."""
+    from app.models.db_models import Email, Feedback
+
+    results = (
+        Feedback.query
+        .join(Email, Feedback.email_id == Email.id)
+        .order_by(Feedback.submitted_at.desc())
+        .all()
+    )
+
+    return jsonify([
+        {
+            "feedback_id": f.id,
+            "email_id": f.email_id,
+            "sender": f.email.sender,
+            "subject": f.email.subject,
+            "user_verdict": f.user_verdict,
+            "comment": f.comment,
+            "submitted_at": f.submitted_at.isoformat(),
+        }
+        for f in results
+    ])
+
 @api_bp.route("/whitelist", methods=["GET"])
 def get_whitelist():
     """Returns all whitelisted sender domains."""
@@ -229,3 +290,23 @@ def add_whitelist():
     db.session.commit()
 
     return jsonify({"status": "added", "id": entry.id, "sender_domain": domain})
+
+@api_bp.route("/emails/<int:email_id>", methods=["DELETE"])
+def delete_email(email_id):
+    """
+    Deletes a stored email and its associated predictions/feedback.
+    Answers the 'is data discarded' question with a real mechanism,
+    not just a policy statement.
+    """
+    from app import db
+    from app.models.db_models import Email, Prediction, Feedback
+
+    email = Email.query.get(email_id)
+    if not email:
+        return jsonify({"error": "not found"}), 404
+
+    Prediction.query.filter_by(email_id=email_id).delete()
+    Feedback.query.filter_by(email_id=email_id).delete()
+    db.session.delete(email)
+    db.session.commit()
+    return jsonify({"status": "deleted", "email_id": email_id})

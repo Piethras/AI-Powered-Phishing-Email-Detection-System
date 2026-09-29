@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Target, AlertTriangle, CheckCircle2, Gauge } from "lucide-react";
+import { Target, AlertTriangle, CheckCircle2, Gauge, Eye } from "lucide-react";
 import "./App.css";
 
 import { API_BASE } from "./constants";
@@ -19,6 +19,8 @@ import QuickPanel from "./components/QuickPanel";
 import ScanEmailPage from "./pages/ScanEmailPage";
 import WhitelistPage from "./pages/WhitelistPage";
 import SettingsPage from "./pages/SettingsPage";
+import EmailHistoryPage from "./pages/EmailHistoryPage";
+import FeedbackReviewPage from "./pages/FeedbackReviewPage";
 
 function App() {
   const [predictions, setPredictions] = useState([]);
@@ -54,6 +56,10 @@ function App() {
           <WhitelistPage />
         ) : activeNav === "settings" ? (
           <SettingsPage />
+        ) : activeNav === "history" ? (
+          <EmailHistoryPage />
+        ) : activeNav === "feedback" ? (
+          <FeedbackReviewPage />
         ) : activeNav !== "dashboard" ? (
           <p className="status-message">This section is coming soon.</p>
         ) : (
@@ -65,6 +71,9 @@ function App() {
                     <StatCard icon={Target} label="Total Scanned" value={insights.total_scanned} />
                     <StatCard icon={AlertTriangle} label="Phishing Detected" value={insights.total_flagged} accent="phishing" />
                     <StatCard icon={CheckCircle2} label="Legitimate Emails" value={insights.total_legitimate} accent="legit" />
+                      {insights.total_uncertain > 0 && (
+                      <StatCard icon={Eye} label="Needs Review" value={insights.total_uncertain} accent="amber" />
+                    )}
                     <StatCard icon={Gauge} label="Model Precision" value="98%" accent="purple" />
                   </div>
                 )}

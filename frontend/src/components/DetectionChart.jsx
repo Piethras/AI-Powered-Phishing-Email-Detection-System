@@ -14,6 +14,7 @@ export default function DetectionChart({ dailySeries }) {
         <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E4E8EE", borderRadius: 8, fontSize: 12 }} />
         <Line type="monotone" dataKey="legitimate" stroke="#38A874" strokeWidth={2.5} dot={{ r: 3 }} />
         <Line type="monotone" dataKey="phishing" stroke="#E1554F" strokeWidth={2.5} dot={{ r: 3 }} />
+        <Line type="monotone" dataKey="uncertain" stroke="#E0B85E" strokeWidth={2.5} dot={{ r: 3 }} />
       </LineChart>
     </ResponsiveContainer>
   );

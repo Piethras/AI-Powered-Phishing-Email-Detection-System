@@ -21,7 +21,7 @@ export default function MobileNav({ active, onNavigate }) {
           <div className="mobile-nav__drawer">
             <div className="mobile-nav__brand">
               <Shield size={20} className="sidebar__brand-icon" />
-              <span>PhishGuard AI</span>
+              <span>PhishGuard</span>
             </div>
             {NAV_ITEMS.map(({ key, label, icon: Icon }) => (
               <button
